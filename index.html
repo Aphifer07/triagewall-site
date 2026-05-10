@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Triagewall — Local-LLM alert triage for self-hosted SOCs</title>
-  <meta name="description" content="Local-LLM alert triage for self-hosted SOCs. Pre-release.">
+  <meta name="description" content="Local-LLM Suricata alert triage for homelabs. Reduce alert noise without sending data to the cloud. Self-hosted, AGPL-3.0.">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -43,11 +43,68 @@
       font-size: 0.95rem;
     }
     .status strong { color: #d29922; }
+    .screenshot {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid #30363d;
+      margin-bottom: 48px;
+    }
     .description {
       margin-bottom: 48px;
       font-size: 1rem;
     }
     .description p { margin-bottom: 16px; }
+    .install { margin-bottom: 48px; }
+    .section-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #6e7681;
+      margin-bottom: 12px;
+    }
+    pre {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 16px 20px;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+      font-size: 0.875rem;
+      margin-bottom: 12px;
+    }
+    code { color: #c9d1d9; }
+    .install-note {
+      font-size: 0.875rem;
+      color: #8b949e;
+    }
+    .install-note code {
+      background: #161b22;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 0.85em;
+    }
+    .metrics { margin-bottom: 48px; }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+    .metric {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 16px;
+    }
+    .metric-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #f0f6fc;
+      margin-bottom: 4px;
+    }
+    .metric-label {
+      font-size: 0.85rem;
+      color: #8b949e;
+    }
     nav { display: flex; flex-direction: column; gap: 12px; margin-bottom: 48px; }
     nav a {
       color: #58a6ff;
@@ -72,32 +129,70 @@
 <body>
   <main>
     <h1>Triagewall</h1>
-    <p class="tagline">Local-LLM alert triage for self-hosted SOCs.</p>
+    <p class="tagline">Local-LLM Suricata alert triage for homelabs. Reduce alert noise without sending data to the cloud.</p>
 
-    <div class="status">
-      <strong>Pre-release.</strong> Triagewall is in active development toward v0.1.
-      Star the repo to be notified when it's ready to install. First public
-      release expected mid-2026.
+    <div class="status" style="border-left-color: #2ea043;">
+      <strong style="color: #2ea043;">v0.1 available.</strong> Free and open source. Two-tier
+      classification with a local LLM. Tested on a production homelab
+      processing 6,000–13,000 alerts per hour.
     </div>
+
+    <img src="dashboard.png" alt="Triagewall dashboard showing 99.2% prefilter ratio across 417,514 alerts in 24 hours" class="screenshot">
 
     <div class="description">
       <p>If you run Suricata on OPNsense or pfSense, you know the problem.
-        Hundreds of alerts a day, the vast majority of which are noise. The
-        signal is in there, but you're not going to find it at 11 PM.</p>
-      <p>Triagewall is a local-LLM triage layer for the open-source SIEM
-        stack: Wazuh, Suricata, and Ollama. Pre-filter the obvious noise.
-        Send the gray area to a local model. Stop drowning in alerts.</p>
-      <p>Free and AGPL-3.0. Runs on your hardware. No telemetry.</p>
+      Thousands of alerts a day, mostly noise. The signal is in there, but
+      you're not going to find it at 11 PM.</p>
+      <p>Triagewall pre-filters known-benign signatures with a tunable JSON
+      config (microsecond lookups, zero LLM cost), then sends the residual
+      long tail to a local Ollama model for classification. On a typical
+      homelab, the prefilter handles 99%+ of alerts after a day of tuning.
+      The LLM sees only the genuinely interesting traffic.</p>
+      <p>Free and AGPL-3.0. Runs on your hardware. No telemetry. Default model
+      is Mistral 7B running on any GPU with 8GB+ VRAM.</p>
+    </div>
+
+    <div class="install">
+      <p class="section-label">Install</p>
+      <pre><code>git clone https://github.com/Aphifer07/triagewall
+cd triagewall
+docker compose up -d</code></pre>
+      <p class="install-note">Dashboard at <code>http://localhost:8084</code>.
+      Demo mode included — no Suricata required to evaluate.</p>
+    </div>
+
+    <div class="metrics">
+      <p class="section-label">Measured in production</p>
+      <div class="metrics-grid">
+        <div class="metric">
+          <div class="metric-value">99.2%</div>
+          <div class="metric-label">prefilter ratio</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value">1–3s</div>
+          <div class="metric-label">LLM latency (Mistral 7B / RTX 4060)</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value">&lt;2 min</div>
+          <div class="metric-label">end-to-end lag at steady state</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value">6–13K</div>
+          <div class="metric-label">alerts / hour processed</div>
+        </div>
+      </div>
     </div>
 
     <nav>
       <a href="https://github.com/Aphifer07/triagewall">View on GitHub</a>
-      <a href="https://github.com/Aphifer07/triagewall/blob/main/README.md">Read the design</a>
-      <a href="mailto:hello@triagewall.io">Get launch updates</a>
+      <a href="https://github.com/Aphifer07/triagewall#quick-start">Install in 5 minutes</a>
+      <a href="https://github.com/Aphifer07/triagewall/blob/master/ROADMAP.md">v0.2 roadmap</a>
+      <a href="mailto:hello@triagewall.io">Get in touch</a>
     </nav>
 
     <footer>
       <p>Built in public.
+        <a href="https://github.com/Aphifer07/triagewall">Source on GitHub</a>.
         Questions? <a href="mailto:hello@triagewall.io">hello@triagewall.io</a></p>
     </footer>
   </main>
