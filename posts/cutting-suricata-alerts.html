@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How I Cut 13,000 Suricata Alerts an Hour Down to 200 Worth Reading — Triagewall</title>
+  <meta name="description" content="Building a two-tier local-LLM triage layer for a homelab IDS — architecture, the numbers, and what broke when I tested it on a 2018 laptop.">
+  <meta property="og:title" content="How I Cut 13,000 Suricata Alerts an Hour Down to 200 Worth Reading">
+  <meta property="og:description" content="Building a two-tier local-LLM triage layer for a homelab IDS — architecture, the numbers, and what broke when I tested it on a 2018 laptop.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://triagewall.io/posts/cutting-suricata-alerts">
+  <meta property="og:image" content="https://triagewall.io/dashboard.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="How I Cut 13,000 Suricata Alerts an Hour Down to 200 Worth Reading">
+  <meta name="twitter:description" content="Building a two-tier local-LLM triage layer for a homelab IDS — architecture, the numbers, and what broke when I tested it on a 2018 laptop.">
+  <link rel="canonical" href="https://triagewall.io/posts/cutting-suricata-alerts">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      line-height: 1.6;
+    }
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 56px 24px 96px;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 48px;
+      font-size: 0.9rem;
+    }
+    .topbar a { color: #58a6ff; text-decoration: none; }
+    .topbar a:hover { color: #79c0ff; }
+    h1 {
+      font-size: 2.1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+      color: #f0f6fc;
+      line-height: 1.2;
+    }
+    h2 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #f0f6fc;
+      margin: 40px 0 16px;
+      letter-spacing: -0.01em;
+    }
+    .post-meta {
+      color: #6e7681;
+      font-size: 0.9rem;
+      margin-bottom: 32px;
+    }
+    p { margin-bottom: 18px; }
+    ul, ol { margin: 0 0 18px 24px; }
+    li { margin-bottom: 8px; }
+    a { color: #58a6ff; }
+    a:hover { color: #79c0ff; }
+    strong { color: #f0f6fc; }
+    pre {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 16px 20px;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+    pre code { color: #c9d1d9; background: none; padding: 0; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+      background: #161b22;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 0.85em;
+      color: #c9d1d9;
+    }
+    blockquote {
+      border-left: 3px solid #d29922;
+      background: #161b22;
+      padding: 14px 20px;
+      margin: 0 0 20px;
+      border-radius: 0 4px 4px 0;
+      color: #e6edf3;
+      font-style: italic;
+    }
+    blockquote p { margin-bottom: 0; }
+    blockquote.editor-note {
+      border-left-color: #6e7681;
+      color: #8b949e;
+      font-size: 0.92rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 24px;
+      font-size: 0.9rem;
+    }
+    th, td {
+      border: 1px solid #30363d;
+      padding: 8px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #161b22; color: #f0f6fc; font-weight: 600; }
+    tr:nth-child(even) td { background: #0f141a; }
+    hr {
+      border: none;
+      border-top: 1px solid #30363d;
+      margin: 48px 0 32px;
+    }
+    .author-bio { color: #8b949e; font-size: 0.92rem; }
+    .author-bio h2 { font-size: 1.1rem; color: #c9d1d9; }
+    footer {
+      color: #6e7681;
+      font-size: 0.85rem;
+      margin-top: 56px;
+      padding-top: 24px;
+      border-top: 1px solid #21262d;
+    }
+    footer a { color: #6e7681; }
+    /* blog index */
+    .post-list { list-style: none; margin: 0; padding: 0; }
+    .post-list li {
+      border-bottom: 1px solid #21262d;
+      padding: 24px 0;
+      margin: 0;
+    }
+    .post-list h2 { margin: 0 0 6px; font-size: 1.25rem; }
+    .post-list h2 a { text-decoration: none; }
+    .post-list .date { color: #6e7681; font-size: 0.85rem; margin-bottom: 8px; }
+    .post-list .desc { color: #8b949e; font-size: 0.95rem; margin: 0; }
+  </style>
+</head>
+<body>
+  <main>
+  <div class="topbar">
+    <a href="/posts">← All writeups</a>
+    <a href="/">triagewall.io</a>
+  </div>
+
+      <blockquote class="editor-note"><em>Written May 2026 for the v0.1 launch and published as a time capsule. Since then I swapped the production model from Mistral 7B to Foundation-Sec-8B after a more rigorous benchmark — that’s the subject of the <a href="/posts/prompt-injection-phase-2">v0.2 writeup</a>. The “more rigorous experiment” I mention near the end is what drove that decision.</em></blockquote>
+<h1>How I Cut 13,000 Suricata Alerts an Hour Down to 200 Worth Reading</h1>
+<p>It's 11pm on a Tuesday. My phone buzzes with another Suricata alert from my homelab. I open Wazuh, scroll past hundreds of "ET POLICY" notices, find what I'm almost sure is just my wife's iPhone doing STUN traffic for FaceTime, and close the laptop. The alerts keep coming. They've been coming for hours.</p>
+<p>This was a recurring problem. I'd built a self-hosted SIEM stack — OPNsense with Suricata for the IDS, Wazuh as the manager, Zeek for protocol-level analysis — and it worked. It worked too well, actually. At peak my homelab was generating between 6,000 and 13,000 alerts per hour. There was no chance I was reading them. I started ignoring the dashboard entirely, which is exactly the failure mode IDS deployments are supposed to prevent.</p>
+<p>I looked at commercial XDR products. The pricing pages were not designed for someone running this at home. So I closed the tab and started thinking about what a homelab-budget version would actually look like.</p>
+<p>That project turned into Triagewall. This post is the writeup of how I built it, why I made the choices I did, what surprised me along the way, and what I learned recently when I tried to run it on hardware much smaller than what I designed it for.</p>
+<h2>The problem with self-hosted IDS at this scale</h2>
+<p>Suricata is genuinely good at what it does. The Emerging Threats ruleset is comprehensive enough that on a residential network with a normal mix of streaming, gaming, IoT devices, and Microsoft Teams traffic, you'll get thousands of alerts a day that are technically true positives — meaning Suricata is correctly firing on traffic that matches its signatures — but functionally noise, because the signatures are written for enterprise environments where that traffic would actually be suspicious.</p>
+<p>A few examples from my own deployment:</p>
+<ul>
+<li>ET POLICY rules that flag any outbound Basic Auth header. In an enterprise this would be a credential leak. In my homelab it's an old IoT device doing its thing.</li>
+<li>Signatures that fire on Microsoft Teams STUN traffic because the protocol patterns happen to overlap with rules originally written for Conficker, a worm from 2008. I spent an embarrassing amount of time convinced my LLM had detected actual malware before I figured out what was happening.</li>
+<li>Pi-hole NXDOMAIN responses. Every blocked ad request technically looks like a DNS failure to a rule that doesn't know about ad blocking.</li>
+</ul>
+<p>You can solve some of this with manual rule tuning — disabling specific SIDs, writing pass rules, modifying the suppression config — but the maintenance burden is real, and any time you update the ruleset you potentially undo your tuning. The alternative I kept seeing recommended is "just send your alerts to a SIEM and write detection logic there," but that's the same problem one layer up. Now I'm writing Wazuh rules instead of Suricata rules and the alerts still pile up.</p>
+<p>What I actually wanted was something between the raw alerts and my eyeballs. A triage layer.</p>
+<h2>What I considered and rejected</h2>
+<p>Before I started writing code, I tried to be honest with myself about whether this was a problem someone had already solved.</p>
+<p><strong>Commercial XDR (Sentinel, CrowdStrike, Arctic Wolf):</strong> The right answer for an enterprise. Wrong answer for a homelab. The pricing alone is a non-starter, and most of these products don't even sell to individuals.</p>
+<p><strong>Open-source SOAR (Shuffle, TheHive, Cortex):</strong> Closer to what I wanted, but the assumption is that you're building playbooks to <em>act</em> on alerts, not to decide which ones deserve attention in the first place. The triage problem is upstream of the response problem.</p>
+<p><strong>Just tuning the rules harder:</strong> I tried this. Spent a weekend writing suppressions and pass rules. The alert volume dropped by maybe 60%. Then a ruleset update landed and I was mostly back to where I started. Tuning is a treadmill, not a fix.</p>
+<p><strong>Doing nothing:</strong> Honestly tempting, but it defeats the purpose of running an IDS in the first place.</p>
+<p>What I kept coming back to was the observation that <em>I, sitting at a keyboard, can usually look at a Suricata alert and decide in 5-10 seconds whether it's worth investigating</em>. The problem isn't that the decision is hard; it's that there are too many decisions. That's a problem an LLM can plausibly help with, as long as I'm willing to accept some false negatives.</p>
+<h2>The architecture</h2>
+<p>Triagewall is a two-tier classifier in front of the alert stream:</p>
+<pre><code>OPNsense (Suricata IDS)
+    │
+    │ rsync over SSH, every 60s
+    ▼
+omv1 server: /var/log/suricata-opnsense/eve.json
+    │
+    │ Python daemon tails the file
+    ▼
+ingest.py
+    │
+    ├─► Prefilter check (in-memory dict lookup)
+    │   │
+    │   └─► 99% of alerts: classified as false_positive immediately
+    │
+    └─► Otherwise: HTTP POST to local Ollama
+        │
+        └─► Mistral 7B classifies as real_threat / false_positive / uncertain
+            │
+            ▼
+SQLite (/var/lib/triagewall/triage.db)
+    │
+    │ FastAPI dashboard polls every 5s
+    ▼
+Web UI on port 8084
+</code></pre>
+<p><strong>Tier 1: the prefilter.</strong> A JSON config file maps known-noise Suricata signature IDs to "false_positive" with a brief reason. STUN traffic, Discord voice, ET POLICY rules I've decided I don't care about, Pi-hole NXDOMAINs. The prefilter is an in-memory dictionary lookup, which means it runs in microseconds and lets me handle the bulk of alert volume without ever touching the LLM. After a few weeks of tuning, the prefilter catches 99.9% of alerts.</p>
+<p><strong>Tier 2: the LLM.</strong> Anything the prefilter doesn't catch gets sent to a local Ollama instance running Mistral 7B Instruct on a separate machine with an RTX 4060. The LLM gets the alert details and returns a classification plus a one-sentence reason. I run it locally because (a) it's free and (b) I'm not sending my home network alerts to a third party.</p>
+<p><strong>The feedback loop.</strong> Every alert that reaches the LLM tier shows up in the dashboard with "Agree" and "Mark Different" buttons. When I disagree with the classifier, that gets logged. The point is to build a labeled dataset that can eventually inform either better prefilter rules or fine-tuning down the road. Even without using it for training, the feedback loop forces me to actually look at the LLM's reasoning, which is how I caught the Conficker / Teams misclassification in the first place.</p>
+<p><strong>The rest of the stack:</strong> Python, FastAPI for the dashboard, SQLite for storage, Docker Compose to bring it all up. I picked each of these because they're boring and they work. SQLite-is-overkill criticism is the most common one I expect to hear — but for a single-node homelab deployment with a few hundred LLM-classified alerts a day, Postgres would be operational overhead with no real benefit. I'll switch when there's a real reason to.</p>
+<h2>The numbers, after a few weeks of real-world tuning</h2>
+<p>I've been running Triagewall against my own homelab alerts for several weeks now. The current state:</p>
+<ul>
+<li><strong>1.28 million alerts processed lifetime</strong></li>
+<li><strong>99.9% prefilter ratio</strong> after iterating on the noise rules</li>
+<li><strong>~200 alerts per day reach the LLM tier</strong></li>
+<li><strong>End-to-end latency under 2 minutes</strong> from Suricata firing to the alert appearing on the dashboard with a classification</li>
+<li><strong>Approximate cost:</strong> electricity for the 4060 box, which is the main hardware addition for the LLM tier</li>
+</ul>
+<p>The 200-per-day number is what actually matters. That's a volume I can review. It's a small enough number that I'll occasionally read through everything before bed and confirm or correct the classifications. It turns my IDS from a thing I ignore into a thing I actually use.</p>
+<p>The 99.9% prefilter number is also worth dwelling on for a second. That sounds impressive and slightly suspicious, and the honest framing is: most of the noise in residential IDS deployments is dominated by a small number of very high-volume rules. Once you identify them and write prefilter entries, you bypass enormous fractions of the alert stream without losing much signal. The hard part isn't the math, it's the discipline of actually doing the tuning instead of installing the system and walking away.</p>
+<h2>What I learned testing this on a 2018 laptop</h2>
+<p>Recently the maintainer of awesome-suricata, who was generous enough to merge Triagewall into the official tools list, asked a really good question: any suggestions for smaller models to try on an integrated GPU?</p>
+<p>The honest answer at the time was "I haven't tested it, my deployment runs Mistral 7B on a dedicated RTX 4060." But the question stuck with me. So I pulled out an old laptop — an i5-8265U from 2018, Intel UHD 620 integrated graphics, 15.5GB of RAM, running Pop!_OS — and ran a quick experiment with three smaller models in Ollama. (Note: Ollama doesn't meaningfully accelerate on Intel iGPUs, so everything below ran CPU-only.)</p>
+<p>I used two test prompts: one alert that's commonly a false positive (an ET POLICY HTTP Basic Auth alert with 8.8.8.8 as the destination, which is a known distractor pattern for models), and one alert that's clearly a real threat (an ET MALWARE BlackHole user-agent alert). Here's what I saw:</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Warm latency</th>
+<th>Quality notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Phi-3 Mini (3.8B)</td>
+<td>~12s</td>
+<td>Got distracted by surface features. Saw 8.8.8.8 and reasoned its way to "this is DNS traffic, false positive" while completely ignoring the actual signature.</td>
+</tr>
+<tr>
+<td>Llama 3.2 (3B)</td>
+<td>~7-10s</td>
+<td>Concerning. Twice misclassified a clear malware alert as a false positive, both times inventing plausible-sounding but completely fabricated justifications.</td>
+</tr>
+<tr>
+<td>Gemma 2 (2B)</td>
+<td>~7-9s</td>
+<td>The best of the three. Correctly flagged the malware alert as a real threat. Got a bit vague on a harder alert but did not fabricate.</td>
+</tr>
+</tbody>
+</table>
+<p>The interesting insight isn't really about speed. It's about <em>failure mode</em>. Mistral 7B on the RTX 4060 sometimes hedges when it's uncertain, which is fine — uncertain is a valid classification in this system, and the dashboard handles it. The smaller models I tested mostly didn't hedge. They produced confident, well-formatted JSON output that was factually wrong about why the alert fired. Llama 3.2 in particular invented different fake justifications on different runs for the same alert, which is exactly the failure pattern you don't want in a triage tool.</p>
+<p>Practical takeaway: Gemma 2 2B is the only model from this small set I'd cautiously suggest for CPU-only or integrated-GPU setups, and even then the Agree/Mark Different feedback loop matters <em>more</em> on smaller models, not less. If you're running Triagewall on something modest, plan on reviewing the LLM tier carefully until you're confident the model is calibrated.</p>
+<p>There's a much more rigorous version of this experiment I want to do for v0.2 — broader model lineup, larger sample of real alerts, side-by-side comparison against the Mistral baseline. But the quick test gave me a much more honest answer than I had before, which is the whole point of running experiments.</p>
+<h2>What's next</h2>
+<p>A few things are on the v0.2 list, in rough priority order:</p>
+<ul>
+<li>Better support for integrated-GPU and CPU-only deployments, informed by the testing above</li>
+<li>Wazuh API integration so Triagewall can pull from Wazuh's alert stream as well as raw Suricata eve.json</li>
+<li>Pi-hole DNS correlation, so a flagged outbound connection can be cross-referenced with the DNS lookup that initiated it</li>
+<li>A UI redesign — the current dashboard is functional but not what I'd call beautiful, and a triage tool you have to look at every day deserves better</li>
+<li>An "investigation agent" mode that correlates flagged alerts across sources before surfacing them, for the cases where one alert in isolation isn't enough to act on but a pattern across three sources is</li>
+</ul>
+<p>None of those are committed timelines. The next month is mostly about publishing this writeup, getting feedback from people who actually try the tool, and letting that feedback shape what gets built next.</p>
+<h2>Try it / find me</h2>
+<p>Triagewall is open source under AGPL-3.0. The repo is at <a href="https://github.com/aaronphifer/triagewall">github.com/aaronphifer/triagewall</a>. There's a demo mode that runs against synthetic fixtures so you can see the dashboard without needing a working Suricata deployment — <code>docker compose up</code> with <code>DEMO_MODE=true</code> in the env, then visit port 8084. If you run a self-hosted IDS at home and you've been drowning in alerts, I'd genuinely love feedback.</p>
+<p>A note about me: I'm a Navy nuclear mechanic separating later this year, looking for data center operations roles. The homelab work, the Triagewall project, and writing things like this post are how I'm building toward that next chapter. If your team is hiring for hands-on infrastructure or critical facilities work and you'd be interested in a former nuke who builds his own tools in his spare time, I'd love to talk. Reach out via GitHub or LinkedIn.</p>
+    <footer>
+      <p>Built in public. <a href="https://github.com/aaronphifer/triagewall">Source on GitHub</a> · <a href="mailto:hello@triagewall.io">hello@triagewall.io</a></p>
+    </footer>
+  </main>
+</body>
+</html>

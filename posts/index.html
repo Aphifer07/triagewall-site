@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Writeups — Triagewall</title>
+  <meta name="description" content="Notes on building Triagewall, a local-LLM Suricata alert triage tool for homelabs.">
+  <meta property="og:title" content="Triagewall Writeups">
+  <meta property="og:description" content="Notes on building Triagewall, a local-LLM Suricata alert triage tool for homelabs.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://triagewall.io/posts">
+  <link rel="canonical" href="https://triagewall.io/posts">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      line-height: 1.6;
+    }
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 56px 24px 96px;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 48px;
+      font-size: 0.9rem;
+    }
+    .topbar a { color: #58a6ff; text-decoration: none; }
+    .topbar a:hover { color: #79c0ff; }
+    h1 {
+      font-size: 2.1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+      color: #f0f6fc;
+      line-height: 1.2;
+    }
+    h2 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #f0f6fc;
+      margin: 40px 0 16px;
+      letter-spacing: -0.01em;
+    }
+    .post-meta {
+      color: #6e7681;
+      font-size: 0.9rem;
+      margin-bottom: 32px;
+    }
+    p { margin-bottom: 18px; }
+    ul, ol { margin: 0 0 18px 24px; }
+    li { margin-bottom: 8px; }
+    a { color: #58a6ff; }
+    a:hover { color: #79c0ff; }
+    strong { color: #f0f6fc; }
+    pre {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 16px 20px;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+    pre code { color: #c9d1d9; background: none; padding: 0; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+      background: #161b22;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 0.85em;
+      color: #c9d1d9;
+    }
+    blockquote {
+      border-left: 3px solid #d29922;
+      background: #161b22;
+      padding: 14px 20px;
+      margin: 0 0 20px;
+      border-radius: 0 4px 4px 0;
+      color: #e6edf3;
+      font-style: italic;
+    }
+    blockquote p { margin-bottom: 0; }
+    blockquote.editor-note {
+      border-left-color: #6e7681;
+      color: #8b949e;
+      font-size: 0.92rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 24px;
+      font-size: 0.9rem;
+    }
+    th, td {
+      border: 1px solid #30363d;
+      padding: 8px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #161b22; color: #f0f6fc; font-weight: 600; }
+    tr:nth-child(even) td { background: #0f141a; }
+    hr {
+      border: none;
+      border-top: 1px solid #30363d;
+      margin: 48px 0 32px;
+    }
+    .author-bio { color: #8b949e; font-size: 0.92rem; }
+    .author-bio h2 { font-size: 1.1rem; color: #c9d1d9; }
+    footer {
+      color: #6e7681;
+      font-size: 0.85rem;
+      margin-top: 56px;
+      padding-top: 24px;
+      border-top: 1px solid #21262d;
+    }
+    footer a { color: #6e7681; }
+    /* blog index */
+    .post-list { list-style: none; margin: 0; padding: 0; }
+    .post-list li {
+      border-bottom: 1px solid #21262d;
+      padding: 24px 0;
+      margin: 0;
+    }
+    .post-list h2 { margin: 0 0 6px; font-size: 1.25rem; }
+    .post-list h2 a { text-decoration: none; }
+    .post-list .date { color: #6e7681; font-size: 0.85rem; margin-bottom: 8px; }
+    .post-list .desc { color: #8b949e; font-size: 0.95rem; margin: 0; }
+  </style>
+</head>
+<body>
+  <main>
+  <div class="topbar">
+    <a href="/">← triagewall.io</a>
+    <a href="https://github.com/aaronphifer/triagewall">GitHub</a>
+  </div>
+  <h1>Writeups</h1>
+  <p class="post-meta">Notes on building Triagewall in public — architecture, experiments, and the things that broke.</p>
+  <ul class="post-list">
+    <li>
+      <h2><a href="/posts/prompt-injection-phase-2">I Found a Prompt Injection in My Own IDS Triage Tool. Here’s What Actually Stopped It.</a></h2>
+      <div class="date">May 25, 2026</div>
+      <p class="desc">I attacked my own LLM-based Suricata triage tool, found a real URL injection vulnerability, and the obvious fix didn’t work. Here’s what did.</p>
+    </li>
+    <li>
+      <h2><a href="/posts/cutting-suricata-alerts">How I Cut 13,000 Suricata Alerts an Hour Down to 200 Worth Reading</a></h2>
+      <div class="date">May 18, 2026</div>
+      <p class="desc">Building a two-tier local-LLM triage layer for a homelab IDS — architecture, the numbers, and what broke when I tested it on a 2018 laptop.</p>
+    </li>
+  </ul>
+    <footer>
+      <p>Built in public. <a href="https://github.com/aaronphifer/triagewall">Source on GitHub</a> · <a href="mailto:hello@triagewall.io">hello@triagewall.io</a></p>
+    </footer>
+  </main>
+</body>
+</html>
